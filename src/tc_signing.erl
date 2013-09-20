@@ -69,7 +69,7 @@ base_string(Request) ->
   "POST&" ++ percent_encode(Request#request.base_url) ++ "&" ++ percent_encode(parameter_string(Request)).
 
 request_params(Request) ->
-    Request#request.params.
+    Request#request.params ++ Request#request.oauth_params.
 
 parameter_string_test() ->
   Request = test_request(),
@@ -89,15 +89,15 @@ test_request()->
   Secrets = #secrets{consumer_secret="kAcSOqF21Fu85e7zjz7ZN2U4ZRhfV3WpwPAoE3Z7kBw",
     oauth_token_secret="LswwdoUaIvS8ltyTt5jkRh4J50vUPVVHtR2YPi5kE"},
   Params = [{status, "Hello Ladies + Gentlemen, a signed OAuth request!"},
-    {include_entities, "true"},
-    {oauth_consumer_key, "xvz1evFS4wEEPTGEFPHBog"},
+    {include_entities, "true"}],
+  OAuthParams=[{oauth_consumer_key, "xvz1evFS4wEEPTGEFPHBog"},
     {oauth_nonce, "kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg"},
     {oauth_signature_method, "HMAC-SHA1"},
     {oauth_timestamp, "1318622958"},
     {oauth_token, "370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb"},
     {oauth_version, "1.0"}],
   Url = "https://api.twitter.com/1/statuses/update.json",
-  #request{secrets=Secrets, params=Params, base_url=Url}.
+  #request{secrets=Secrets, params=Params, oauth_params=OAuthParams, base_url=Url}.
 
 signature_test() ->
   Request = test_request(),
