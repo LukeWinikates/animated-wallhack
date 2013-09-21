@@ -4,7 +4,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
--export([signature/1]).
+-export([signature/1, joinparam/1, joinparams/1, authorization_header/1]).
 
 signing_key(Secrets) ->
   signing_key(Secrets#secrets.consumer_secret, Secrets#secrets.oauth_token_secret).
@@ -31,13 +31,15 @@ joinparams([S | Rest], Separator, Acc) ->
 joinparams(All) ->
   joinparams(All, "&", []).
 
+joinparam(Param) ->
+  {A,B} = Param,
+  K = erlang:atom_to_list(A),
+  V = percent_encode(B),
+  K ++ "=" ++ V.
+
 parameter_string(Request) ->
   Sorted = lists:sort(request_params(Request)),
-  Encoded = lists:map(fun(Param)->
-        {A,B} = Param,
-        K = erlang:atom_to_list(A),
-        V = percent_encode(B),
-        K ++ "=" ++ V end, Sorted),
+  Encoded = lists:map(fun joinparam/1, Sorted),
   joinparams(Encoded).
 
 percent_encode(Str) ->
@@ -66,10 +68,28 @@ percent_encode(Str) ->
   end.
 
 base_string(Request) ->
-  "POST&" ++ percent_encode(Request#request.base_url) ++ "&" ++ percent_encode(parameter_string(Request)).
+  method(Request) ++ "&" ++ percent_encode(Request#request.base_url) ++ "&" ++ percent_encode(parameter_string(Request)).
+
+method(Request) ->
+  case Request#request.method of
+    post -> "POST";
+    get -> "GET";
+    _True -> error
+  end.
 
 request_params(Request) ->
     Request#request.params ++ Request#request.oauth_params.
+
+authorization_header(Request) ->
+  Params = [{oauth_signature, signature(Request)} | Request#request.oauth_params],
+  Sorted = lists:sort(Params),
+  Encoded = lists:map(fun(Param) ->
+      {A, B} = Param,
+      K = erlang:atom_to_list(A),
+      V = percent_encode(B),
+      K ++ "=\"" ++ V ++ "\""
+    end, Sorted),
+  "OAuth " ++ joinparams(Encoded, ", ", []).
 
 parameter_string_test() ->
   Request = test_request(),
@@ -97,7 +117,7 @@ test_request()->
     {oauth_token, "370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb"},
     {oauth_version, "1.0"}],
   Url = "https://api.twitter.com/1/statuses/update.json",
-  #request{secrets=Secrets, params=Params, oauth_params=OAuthParams, base_url=Url}.
+  #request{secrets=Secrets, params=Params, oauth_params=OAuthParams, base_url=Url, method=post}.
 
 signature_test() ->
   Request = test_request(),
@@ -105,3 +125,6 @@ signature_test() ->
 
 percent_encode_test() ->
   ?assertMatch("Hello%20Ladies%20%2B%20Gentlemen%2C%20a%20signed%20OAuth%20request%21", percent_encode("Hello Ladies + Gentlemen, a signed OAuth request!")).
+
+authorization_header_test() ->
+  ?assertMatch("OAuth oauth_consumer_key=\"xvz1evFS4wEEPTGEFPHBog\", oauth_nonce=\"kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg\", oauth_signature=\"tnnArxj06cWHq44gCs1OSKk%2FjLY%3D\", oauth_signature_method=\"HMAC-SHA1\", oauth_timestamp=\"1318622958\", oauth_token=\"370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb\", oauth_version=\"1.0\"", authorization_header(test_request())).
